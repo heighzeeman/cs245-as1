@@ -66,8 +66,12 @@ public class ColumnTable implements Table {
      */
     @Override
     public long columnSum() {
-        // TODO: Implement this!
-        return 0;
+		long result = 0;
+		int mult = ByteFormat.FIELD_LEN;
+        for (int rowId = 0; rowId < numRows; rowId++) {
+			result += columns.getInt(mult * rowId);
+		}
+        return result;
     }
 
     /**
@@ -79,8 +83,19 @@ public class ColumnTable implements Table {
      */
     @Override
     public long predicatedColumnSum(int threshold1, int threshold2) {
-        // TODO: Implement this!
-        return 0;
+        long result = 0;
+		int nextColOffset = ByteFormat.FIELD_LEN * numRows;
+		
+        for (int rowId = 0; rowId < numRows; rowId++) {
+			int offset = ByteFormat.FIELD_LEN * rowId;
+			int col1Val = columns.getInt(offset + nextColOffset);
+			int col2Val = columns.getInt(offset + nextColOffset*2);
+			if (col1Val > threshold1 && col2Val < threshold2) {
+				result += columns.getInt(offset);
+			}
+		}
+		
+        return result;
     }
 
     /**
@@ -91,8 +106,21 @@ public class ColumnTable implements Table {
      */
     @Override
     public long predicatedAllColumnsSum(int threshold) {
-        // TODO: Implement this!
-        return 0;
+        long result = 0;
+		int nextColOffset = ByteFormat.FIELD_LEN * numRows;
+		
+		for (int rowId = 0; rowId < numRows; rowId++) {
+			int offset = ByteFormat.FIELD_LEN * rowId;
+			int col0Val = columns.getInt(offset);
+			
+			if (col0Val > threshold) {
+				result += col0Val;
+				for (int colId = 1; colId < numCols; colId++) {		
+					result += columns.getInt(offset + nextColOffset * colId);
+				}
+			}
+		}
+        return result;
     }
 
     /**
@@ -103,7 +131,22 @@ public class ColumnTable implements Table {
      */
     @Override
     public int predicatedUpdate(int threshold) {
-        // TODO: Implement this!
-        return 0;
+        int result = 0;
+		int nextColOffset = ByteFormat.FIELD_LEN * numRows;
+		
+		for (int rowId = 0; rowId < numRows; rowId++) {
+			int offset = ByteFormat.FIELD_LEN * rowId;
+			int col0Val = columns.getInt(offset);
+			
+			if (col0Val < threshold) {
+				int col3Offset = offset + 3*nextColOffset;
+				int col2Val = columns.getInt(col3Offset - nextColOffset);
+				int col3Val = columns.getInt(col3Offset);
+				columns.putInt(col3Offset, col3Val + col2Val);
+				
+				result++;
+			}
+		}
+        return result;
     }
 }
