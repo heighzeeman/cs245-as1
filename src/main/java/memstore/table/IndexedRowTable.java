@@ -4,7 +4,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import memstore.data.ByteFormat;
 import memstore.data.DataLoader;
 
-import java.io.*;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.HashSet;
