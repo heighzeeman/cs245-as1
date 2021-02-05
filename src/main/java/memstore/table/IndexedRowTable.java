@@ -4,7 +4,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import memstore.data.ByteFormat;
 import memstore.data.DataLoader;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.HashSet;
@@ -29,6 +29,7 @@ public class IndexedRowTable implements Table {
 
     public IndexedRowTable(int indexColumn) {
         this.indexColumn = indexColumn;
+		this.index = new TreeMap<Integer, IntArrayList>();
     }
 
     /**
@@ -39,7 +40,6 @@ public class IndexedRowTable implements Table {
      */
     @Override
     public void load(DataLoader loader) throws IOException {
-		this.index = new TreeMap<Integer, IntArrayList>();
         this.numCols = loader.getNumCols();
         List<ByteBuffer> rows = loader.getRows();
         this.numRows = rows.size();
@@ -54,11 +54,11 @@ public class IndexedRowTable implements Table {
 				
 				if (colId == indexColumn) {
 					if (!index.containsKey(val)) {
-						IntArrayList empty = new IntArrayList();
-						index.put(val, empty);
+						index.put(val, new IntArrayList());
 					}
 					
-					index.get(val).add(rowId);
+					IntArrayList idxList = index.get(val);
+					idxList.add(rowId);
 				}
             }
         }
@@ -78,6 +78,7 @@ public class IndexedRowTable implements Table {
     @Override
     public void putIntField(int rowId, int colId, int field) {
 		int offset = ByteFormat.FIELD_LEN * ((rowId * numCols) + colId);
+		
 		if (colId == indexColumn) {
 			int currVal = rows.getInt(offset);
 			IntArrayList rowIndices = index.get(currVal);
@@ -85,16 +86,14 @@ public class IndexedRowTable implements Table {
 			if (rowIndices.size() == 0) {
 				index.remove(currVal);
 			}
+	
+			if (!index.containsKey(field)) {
+				index.put(field, new IntArrayList());
+			}
+			index.get(field).add(rowId);
 		}
         
 		rows.putInt(offset, field);
-		
-		if (!index.containsKey(field)) {
-			IntArrayList empty = new IntArrayList();
-			index.put(field, empty);
-		}
-		
-		index.get(field).add(rowId);
     }
 
     /**
@@ -122,15 +121,43 @@ public class IndexedRowTable implements Table {
      */
     @Override
     public long predicatedColumnSum(int threshold1, int threshold2) {
-        long result = 0;
+        long result = 0L;
 		int mult = ByteFormat.FIELD_LEN * numCols;
-        for (int rowId = 0; rowId < numRows; rowId++) {
-			int offset = mult * rowId;
-			if (rows.getInt(offset+4) > threshold1 && rows.getInt(offset+8) < threshold2) {
-				result += rows.getInt(offset);
+		
+		if (indexColumn == 1) {
+			Collection<IntArrayList> relIndices = index.tailMap(threshold1+1).values();
+			
+			for (IntArrayList rowIndices : relIndices) {
+				for (int rowId : rowIndices) {
+					int offset = mult * rowId;
+					if (rows.getInt(offset + 2*ByteFormat.FIELD_LEN) < threshold2) {
+						result += rows.getInt(offset);
+					}
+				}
 			}
+		} else if (indexColumn == 2) {
+			Collection<IntArrayList> relIndices = index.headMap(threshold2).values();
+			
+			for (IntArrayList rowIndices : relIndices) {
+				for (int rowId : rowIndices) {
+					int offset = mult * rowId;
+					if (rows.getInt(offset + ByteFormat.FIELD_LEN) > threshold1) {
+						result += rows.getInt(offset);
+					}
+				}
+			}
+			
+		} else {
+			for (int rowId = 0; rowId < numRows; rowId++) {
+				int offset = mult * rowId;
+				if (rows.getInt(offset + ByteFormat.FIELD_LEN) > threshold1 && rows.getInt(offset + 2*ByteFormat.FIELD_LEN) < threshold2) {
+					result += rows.getInt(offset);
+				}
+			}
+
 		}
         return result;
+		
     }
 
     /**
@@ -142,8 +169,8 @@ public class IndexedRowTable implements Table {
     @Override
     public long predicatedAllColumnsSum(int threshold) {
         long result = 0;
-		/*
-		if (indexColumn == 0) {
+		
+		if (indexColumn == 0 && threshold >= 512) {
 			Collection<IntArrayList> relIndices = index.tailMap(threshold+1).values();
 			
 			for (IntArrayList rowIndices : relIndices) {
@@ -155,7 +182,7 @@ public class IndexedRowTable implements Table {
 				}
 			}
 			
-		} else {*/
+		} else {
 			for (int rowId = 0; rowId < numRows; rowId++) {
 				int offset = ByteFormat.FIELD_LEN * numCols * rowId;
 				int col0Val = rows.getInt(offset);
@@ -163,11 +190,11 @@ public class IndexedRowTable implements Table {
 				if (col0Val > threshold) {
 					result += col0Val;
 					for (int colId = 1; colId < numCols; colId++) {		
-						result += rows.getInt(offset + ByteFormat.FIELD_LEN * colId);
+						result += rows.getInt(offset + ByteFormat.FIELD_LEN*colId);
 					}
 				}
 			}
-		//}
+		}
 		
         return result;
     }
@@ -182,7 +209,7 @@ public class IndexedRowTable implements Table {
     public int predicatedUpdate(int threshold) {
         int result = 0;
 		
-		if (indexColumn == 0) {
+		if (indexColumn == 0 && threshold < 400) {
 			Collection<IntArrayList> relIndices = index.headMap(threshold).values();
 			
 			for (IntArrayList rowIndices : relIndices) {
