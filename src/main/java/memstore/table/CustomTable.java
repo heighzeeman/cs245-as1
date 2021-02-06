@@ -1,8 +1,8 @@
 package memstore.table;
 
+
+//import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
-import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import memstore.data.ByteFormat;
 import memstore.data.DataLoader;
 
@@ -22,19 +22,19 @@ public class CustomTable implements Table {
 
 	int numCols;
     int numRows;
-	private TreeMap<Integer, IntOpenHashSet> col0_index;
-	private TreeMap<Integer, IntOpenHashSet> col1_index;
-	//private TreeMap<Integer, IntOpenHashSet> col2_index;
+	private TreeMap<Integer, IntArrayList> col0_index;
+	private TreeMap<Integer, IntArrayList> col1_index;
+	//private TreeMap<Integer, IntArrayList> col2_index;
     private ByteBuffer rows;
 	private IntArrayList col0to2;
-	private Int2LongOpenHashMap rowSumMap;
+	private IntArrayList rowSumMap;
 
 
     public CustomTable() {
-		this.col0_index = new TreeMap<Integer, IntOpenHashSet>();
-		this.col1_index = new TreeMap<Integer, IntOpenHashSet>();
-		//this.col2_index = new TreeMap<Integer, IntOpenHashSet>();
-		this.rowSumMap = new Int2LongOpenHashMap();
+		this.col0_index = new TreeMap<Integer, IntArrayList>();
+		this.col1_index = new TreeMap<Integer, IntArrayList>();
+		//this.col2_index = new TreeMap<Integer, IntArrayList>();
+		this.rowSumMap = new IntArrayList(numRows);
 	}
 
     /**
@@ -57,7 +57,7 @@ public class CustomTable implements Table {
 
 
         for (int rowId = 0; rowId < numRows; rowId++) {
-			long currRowSum = 0;
+			int currRowSum = 0;
             ByteBuffer curRow = rows.get(rowId);
 			
             for (int colId = 0; colId < numCols; colId++) {
@@ -68,30 +68,30 @@ public class CustomTable implements Table {
                 this.rows.putInt(offset, val);
 				
 				if (colId == 0) {
-					this.col0to2.set(rowId, val);
+					this.col0to2.set(rowId + numRows*colId, val);
 					
 					if (!col0_index.containsKey(val)) {
-						col0_index.put(val, new IntOpenHashSet());
+						col0_index.put(val, new IntArrayList());
 					}
 					col0_index.get(val).add(rowId);
 					
 				} else if (colId == 1) {
 					this.col0to2.set(numRows + rowId, val);
 					if (!col1_index.containsKey(val)) {
-						col1_index.put(val, new IntOpenHashSet());
+						col1_index.put(val, new IntArrayList());
 					}
 					col1_index.get(val).add(rowId);
 					
 				} else if (colId == 2) {
 					this.col0to2.set(numRows*2 + rowId, val);
 					/*if (!col2_index.containsKey(val)) {
-						col2_index.put(val, new IntOpenHashSet());
+						col2_index.put(val, new IntArrayList());
 					}
 					col2_index.get(val).add(rowId);*/
 				}
             }
 			
-			rowSumMap.put(rowId, currRowSum);
+			rowSumMap.add(currRowSum);
         }
     }
 
@@ -116,45 +116,45 @@ public class CustomTable implements Table {
         int currVal = rows.getInt(offset);
 		
 		int diff = field - currVal;
-		long currRowSum = rowSumMap.get(rowId);
-		rowSumMap.replace(rowId, currRowSum + diff);
+		int currRowSum = rowSumMap.get(rowId);
+		rowSumMap.set(rowId, currRowSum + diff);
 		
-		if (colId == 0) {
+		if (colId <= 0) {
 			col0to2.set(rowId, field);
-			IntOpenHashSet relIndices = col0_index.get(currVal);
+			IntArrayList relIndices = col0_index.get(currVal);
 			relIndices.rem(rowId);
 			if (relIndices.size() == 0) {
 				col0_index.remove(currVal);
 			}
 			
 			if (!col0_index.containsKey(field)) {
-				col0_index.put(field, new IntOpenHashSet());
+				col0_index.put(field, new IntArrayList());
 			}
 			col0_index.get(field).add(rowId);
 					
 		} else if (colId == 1) {
 			col0to2.set(numRows + rowId, field);
-			IntOpenHashSet relIndices = col1_index.get(currVal);
+			IntArrayList relIndices = col1_index.get(currVal);
 			relIndices.rem(rowId);
 			if (relIndices.size() == 0) {
 				col1_index.remove(currVal);
 			}
 			
 			if (!col1_index.containsKey(field)) {
-				col1_index.put(field, new IntOpenHashSet());
+				col1_index.put(field, new IntArrayList());
 			}
 			col1_index.get(field).add(rowId);
 			
 		} else if (colId == 2) {
 			col0to2.set(2*numRows + rowId, field);
-			/*IntOpenHashSet relIndices = col2_index.get(currVal);
+			/*IntArrayList relIndices = col2_index.get(currVal);
 			relIndices.rem(rowId);
 			if (relIndices.size() == 0) {
 				col2_index.remove(currVal);
 			}
 			
 			if (!col2_index.containsKey(field)) {
-				col2_index.put(field, new IntOpenHashSet());
+				col2_index.put(field, new IntArrayList());
 			}
 			col2_index.get(field).add(rowId);*/
 		}
@@ -189,17 +189,17 @@ public class CustomTable implements Table {
     public long predicatedColumnSum(int threshold1, int threshold2) {
         long result = 0L;
 		
-		//Collection<IntOpenHashSet> rel1Indices = col1_index.tailMap(threshold1+1);
-		//Collection<IntOpenHashSet> rel2Indices = col2_index.headMap(threshold2).values();
-		if (threshold1 >= 952) {
-			/*IntOpenHashSet col1_RowIdx = new IntOpenHashSet();
-			for (Map.Entry<Integer, IntOpenHashSet> col1idxSet : col1_index.tailMap(threshold1+1).entrySet()) {
+		//Collection<IntArrayList> rel1Indices = col1_index.tailMap(threshold1+1);
+		//Collection<IntArrayList> rel2Indices = col2_index.headMap(threshold2).values();
+		if (threshold1 >= 932) {
+			//IntArrayList col1_RowIdx = new IntArrayList();
+			/*for (Map.Entry<Integer, IntArrayList> col1idxSet : col1_index.tailMap(threshold1+1).entrySet()) {
 				col1_RowIdx.addAll(col1idxSet.getValue());
 			}*/
 			
 			/*if (threshold2 < 128) {
-				IntOpenHashSet col2_RowIdx = new IntOpenHashSet();
-				for (Map.Entry<Integer, IntOpenHashSet> col2idxSet : col2_index.headMap(threshold2).entrySet()) {
+				IntArrayList col2_RowIdx = new IntArrayList();
+				for (Map.Entry<Integer, IntArrayList> col2idxSet : col2_index.headMap(threshold2).entrySet()) {
 					col2_RowIdx.addAll(col2idxSet.getValue());
 				}
 				col1_RowIdx.retainAll(col2_RowIdx);
@@ -210,7 +210,7 @@ public class CustomTable implements Table {
 				return result;
 			}*/
 		
-			for (Map.Entry<Integer, IntOpenHashSet> col1idxSet : col1_index.tailMap(threshold1+1).entrySet()) {
+			for (Map.Entry<Integer, IntArrayList> col1idxSet : col1_index.tailMap(threshold1+1).entrySet()) {
 				for (int rowId : col1idxSet.getValue()) {
 					if (getIntField(rowId, 2) < threshold2) {
 						result += getIntField(rowId, 0);
@@ -219,15 +219,15 @@ public class CustomTable implements Table {
 			}
 			
 			return result;
-		} /*else if (threshold2 < 192) {
-			IntOpenHashSet col2_RowIdx = new IntOpenHashSet();
-			for (Map.Entry<Integer, IntOpenHashSet> col2idxSet : col2_index.headMap(threshold2).entrySet()) {
+		}/* else if (threshold2 < 192) {
+			IntArrayList col2_RowIdx = new IntArrayList();
+			for (Map.Entry<Integer, IntArrayList> col2idxSet : col2_index.headMap(threshold2).entrySet()) {
 				col2_RowIdx.addAll(col2idxSet.getValue());
 			}
 			
 			if (threshold1 >= 952) {
-				IntOpenHashSet col1_RowIdx = new IntOpenHashSet();
-				for (Map.Entry<Integer, IntOpenHashSet> col1idxSet : col1_index.tailMap(threshold1+1).entrySet()) {
+				IntArrayList col1_RowIdx = new IntArrayList();
+				for (Map.Entry<Integer, IntArrayList> col1idxSet : col1_index.tailMap(threshold1+1).entrySet()) {
 					col1_RowIdx.addAll(col1idxSet.getValue());
 				}
 				col1_RowIdx.retainAll(col2_RowIdx);
@@ -268,10 +268,10 @@ public class CustomTable implements Table {
     public long predicatedAllColumnsSum(int threshold) {
         long result = 0L;
 		
-		if (threshold > 816) {
-			Collection<IntOpenHashSet> relIndices = col0_index.tailMap(threshold+1).values();
+		if (threshold > 922) {
+			Collection<IntArrayList> relIndices = col0_index.tailMap(threshold+1).values();
 			
-			for (IntOpenHashSet rowIndices : relIndices) {
+			for (IntArrayList rowIndices : relIndices) {
 				for (int rowId : rowIndices) {
 					result += rowSumMap.get(rowId);
 				}
@@ -297,15 +297,15 @@ public class CustomTable implements Table {
     public int predicatedUpdate(int threshold) {
 		int result = 0;
 		
-		if (threshold <= 242) {
-			Collection<IntOpenHashSet> relIndices = col0_index.headMap(threshold).values();
+		if (threshold <= 148) {
+			Collection<IntArrayList> relIndices = col0_index.headMap(threshold).values();
 			
-			for (IntOpenHashSet rowIndices : relIndices) {
+			for (IntArrayList rowIndices : relIndices) {
 				for (int rowId : rowIndices) {
 					int col2Val = getIntField(rowId, 2);
 					int col3Val = getIntField(rowId, 3);
-					long currRowSum = rowSumMap.get(rowId);
-					rowSumMap.replace(rowId, currRowSum + col2Val);
+					int currRowSum = rowSumMap.get(rowId);
+					rowSumMap.set(rowId, currRowSum + col2Val);
 					
 					rows.putInt(ByteFormat.FIELD_LEN * ((rowId * numCols) + 3), col2Val + col3Val);
 					
@@ -320,8 +320,8 @@ public class CustomTable implements Table {
 			if (getIntField(rowId, 0) < threshold) {
 				int col2Val = getIntField(rowId, 2);
 				int col3Val = getIntField(rowId, 3);
-				long currRowSum = rowSumMap.get(rowId);
-				rowSumMap.replace(rowId, currRowSum + col2Val);
+				int currRowSum = rowSumMap.get(rowId);
+				rowSumMap.set(rowId, currRowSum + col2Val);
 				rows.putInt(ByteFormat.FIELD_LEN * ((rowId * numCols) + 3), col2Val + col3Val);
 					
 				result++;
